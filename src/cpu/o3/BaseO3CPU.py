@@ -172,7 +172,7 @@ class BaseO3CPU(BaseCPU):
         256, "Number of physical vector " "registers"
     )
     numPhysVecPredRegs = Param.Unsigned(
-        32, "Number of physical predicate " "registers"
+        128, "Number of physical predicate " "registers"
     )
     # most ISAs don't use condition-code regs, so default is 0
     numPhysCCRegs = Param.Unsigned(0, "Number of physical cc registers")
