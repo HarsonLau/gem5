@@ -1,0 +1,34 @@
+{
+    "configurations": [
+    {
+        "name": "(gdb) Launch origin Gem5",
+        "type": "cppdbg",
+        "request": "launch",
+        "program": "/mnt/disk/liuhao/gem5/build/RISCV/gem5.debug",
+        "args": [
+            "configs/example/se.py",
+            "--cpu-type=DerivO3CPU",
+            "--caches",
+            "-c",
+            "tests/test-progs/hello/bin/riscv/linux/hello"
+        ],
+        "stopAtEntry": false,
+        "cwd": "/mnt/disk/liuhao/gem5/",
+        "environment": [],
+        "externalConsole": false,
+        "MIMode": "gdb",
+        "setupCommands": [
+            {
+                "description": "Enable pretty-printing for gdb",
+                "text": "-enable-pretty-printing",
+                "ignoreFailures": true
+            },
+            {
+                "description": "Set Disassembly Flavor to Intel",
+                "text": "-gdb-set disassembly-flavor intel",
+                "ignoreFailures": true
+            }
+        ]
+    }
+    ]
+}
