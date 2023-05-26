@@ -277,6 +277,8 @@ class Fetch
     /**
      * Looks up in the branch predictor to see if the next PC should be
      * either next PC+=MachInst or a branch target.
+     * TODO: the doc doesn't match the function signature
+     * TODO: need to change this interface using fetchblock to replace inst
      * @param next_PC Next PC variable passed in by reference.  It is
      * expected to be set to the current PC; it will be updated with what
      * the next PC will be.
@@ -289,6 +291,7 @@ class Fetch
      * Fetches the cache line that contains the fetch PC.  Returns any
      * fault that happened.  Puts the data into the class variable
      * fetchBuffer, which may not hold the entire fetched cache line.
+     * Set fetchStatus to ITlbWait.
      * @param vaddr The memory address that is being fetched from.
      * @param ret_fault The fault reference that will be set to the result of
      * the icache access.
@@ -360,6 +363,7 @@ class Fetch
     RequestPort &getInstPort() { return icachePort; }
 
   private:
+    // the Inst will be enqueued into the fetch queue
     DynInstPtr buildInst(ThreadID tid, StaticInstPtr staticInst,
             StaticInstPtr curMacroop, const PCStateBase &this_pc,
             const PCStateBase &next_pc, bool trace);
@@ -489,7 +493,9 @@ class Fetch
     /** The size of the fetch queue in micro-ops */
     unsigned fetchQueueSize;
 
-    /** Queue of fetched instructions. Per-thread to prevent HoL blocking. */
+    /** Queue of fetched instructions. Per-thread to prevent HoL blocking.
+     * Storing DynInsts (predecoded)
+     */
     std::deque<DynInstPtr> fetchQueue[MaxThreads];
 
     /** Whether or not the fetch buffer data is valid. */

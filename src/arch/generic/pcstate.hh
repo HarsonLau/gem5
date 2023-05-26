@@ -57,6 +57,7 @@ namespace gem5
 class PCStateBase : public Serializable
 {
   protected:
+    //TODO: what do they mean?
     Addr _pc = 0;
     MicroPC _upc = 0;
 

@@ -79,6 +79,7 @@ class BPredUnit : public SimObject
     /** Perform sanity checks after a drain. */
     void drainSanityCheck() const;
 
+    //TODO: cannot make a prediction before the inst is fetched?
     /**
      * Predicts whether or not the instruction is a taken branch, and the
      * target of the branch if it is taken.
@@ -141,6 +142,7 @@ class BPredUnit : public SimObject
      * If a branch is not taken, because the BTB address is invalid or missing,
      * this function sets the appropriate counter in the global and local
      * predictors to not taken.
+     * TODO: weired behavior, btbUpdate updates the global and local predictors
      * @param inst_PC The PC to look up the local predictor.
      * @param bp_history Pointer that will be set to an object that
      * has the branch predictor state associated with the lookup.
@@ -179,6 +181,7 @@ class BPredUnit : public SimObject
      * @param corrTarget The resolved target of the branch (only needed
      * for squashed branches)
      * @todo Make this update flexible enough to handle a global predictor.
+     * TODO: can we remove the inst parameter?
      */
     virtual void update(ThreadID tid, Addr instPC, bool taken,
                    void *bp_history, bool squashed,

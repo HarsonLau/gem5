@@ -257,6 +257,8 @@ Fetch::FetchStatGroup::FetchStatGroup(CPU *cpu, Fetch *fetch)
         rate
             .flags(statistics::total);
 }
+
+//TODO: how to use and maintain TimeBuffer?
 void
 Fetch::setTimeBuffer(TimeBuffer<TimeStruct> *time_buffer)
 {
@@ -508,7 +510,7 @@ Fetch::deactivateThread(ThreadID tid)
 bool
 Fetch::lookupAndUpdateNextPC(const DynInstPtr &inst, PCStateBase &next_pc)
 {
-    // Do branch prediction check here.
+    // Do branch prediction check here.(The inst has already been predecoded)
     // A bit of a misnomer...next_PC is actually the current PC until
     // this function updates it.
     bool predict_taken;
@@ -521,6 +523,7 @@ Fetch::lookupAndUpdateNextPC(const DynInstPtr &inst, PCStateBase &next_pc)
     }
 
     ThreadID tid = inst->threadNumber;
+    //TODO: the BPU interface should use PC to generate branch predictions
     predict_taken = branchPred->predict(inst->staticInst, inst->seqNum,
                                         next_pc, tid);
 
@@ -581,6 +584,7 @@ Fetch::fetchCacheLine(Addr vaddr, ThreadID tid, Addr pc)
     // Setup the memReq to do a read of the first instruction's address.
     // Set the appropriate read size and flags as well.
     // Build request here.
+    // The request addr is aligned to the fetch buffer size.
     RequestPtr mem_req = std::make_shared<Request>(
         fetchBufferBlockPC, fetchBufferSize,
         Request::INST_FETCH, cpu->instRequestorId(), pc,
@@ -1118,9 +1122,10 @@ Fetch::fetch(bool &status_change)
     PCStateBase &this_pc = *pc[tid];
 
     Addr pcOffset = fetchOffset[tid];
+    // generate a fetch address using the pc and the offset
     Addr fetchAddr = (this_pc.instAddr() + pcOffset) & decoder[tid]->pcMask();
 
-    bool inRom = isRomMicroPC(this_pc.microPC());
+    bool inRom = isRomMicroPC(this_pc.microPC());// TODO: what's microPC?
 
     // If returning from the delay of a cache miss, then update the status
     // to running, otherwise do the cache access.  Possibly move this up
@@ -1171,8 +1176,12 @@ Fetch::fetch(bool &status_change)
         return;
     }
 
-    ++fetchStats.cycles;
+    //  circumstances that will reach here(basically when the data is ready):
+    //  1. fetchStatus == IcacheAccessComplete
+    //  2. fetchStatus == Running && do not need to access the icache && have
+    //  no interrupt pending
 
+    ++fetchStats.cycles;
     std::unique_ptr<PCStateBase> next_pc(this_pc.clone());
 
     StaticInstPtr staticInst = NULL;
@@ -1193,6 +1202,7 @@ Fetch::fetch(bool &status_change)
     bool quiesce = false;
 
     const unsigned numInsts = fetchBufferSize / instSize;
+    // the inst offset within the fetch buffer
     unsigned blkOffset = (fetchAddr - fetchBufferPC[tid]) / instSize;
 
     auto *dec_ptr = decoder[tid];
@@ -1206,8 +1216,10 @@ Fetch::fetch(bool &status_change)
         // We need to process more memory if we aren't going to get a
         // StaticInst from the rom, the current macroop, or what's already
         // in the decoder.
+        // seems needMem indicates whether the decoder needs more data
         bool needMem = !inRom && !curMacroop && !dec_ptr->instReady();
         fetchAddr = (this_pc.instAddr() + pcOffset) & pc_mask;
+        //TODO: fetchBufferAlignPC vs fetchBufferPC?
         Addr fetchBufferBlockPC = fetchBufferAlignPC(fetchAddr);
 
         if (needMem) {
@@ -1222,11 +1234,15 @@ Fetch::fetch(bool &status_change)
                 // current block.
                 break;
             }
-
+            // TODO: so this is how the fetched instruction is sent to the
+            // decoder?
             memcpy(dec_ptr->moreBytesPtr(),
-                    fetchBuffer[tid] + blkOffset * instSize, instSize);
+                   fetchBuffer[tid] + blkOffset * instSize, instSize);
             decoder[tid]->moreBytes(this_pc, fetchAddr);
 
+            // TODO: the relation with the above memcpy?
+            // TODO: check decoder->needMoreBytes() && moreBytesPtr &&
+            // moreBytes
             if (dec_ptr->needMoreBytes()) {
                 blkOffset++;
                 fetchAddr += instSize;
@@ -1236,7 +1252,12 @@ Fetch::fetch(bool &status_change)
 
         // Extract as many instructions and/or microops as we can from
         // the memory we've processed so far.
+        // 3 situations:
+        //  1. no curMacroop && no inRom && decoder has inst ready
+        //  2. curMacroop or inRom
         do {
+            // neither inRom nor curMacroop, try to produce a new staticInst
+            // from the decoder
             if (!(curMacroop || inRom)) {
                 if (dec_ptr->instReady()) {
                     staticInst = dec_ptr->decode(this_pc);
@@ -1247,6 +1268,8 @@ Fetch::fetch(bool &status_change)
                     if (staticInst->isMacroop()) {
                         curMacroop = staticInst;
                     } else {
+                        // TODO: pcOffset set to 0 ,why? what does pcOffset
+                        // mean?
                         pcOffset = 0;
                     }
                 } else {
@@ -1269,9 +1292,11 @@ Fetch::fetch(bool &status_change)
                 newMacro |= staticInst->isLastMicroop();
             }
 
+            // TODO: what's a DynInst and where is the DynInstPtr used?
             DynInstPtr instruction = buildInst(
                     tid, staticInst, curMacroop, this_pc, *next_pc, true);
 
+            //TODO: ppFetch?
             ppFetch->notify(instruction);
             numInst++;
 
@@ -1281,19 +1306,23 @@ Fetch::fetch(bool &status_change)
             }
 #endif
 
+            // next_pc will be updated later
             set(next_pc, this_pc);
 
             // If we're branching after this instruction, quit fetching
             // from the same block.
             predictedBranch |= this_pc.branching();
+            // TODO: seems next_pc is actually generated here?
             predictedBranch |= lookupAndUpdateNextPC(instruction, *next_pc);
             if (predictedBranch) {
                 DPRINTF(Fetch, "Branch detected with PC = %s\n", this_pc);
             }
 
+            // TODO: can these two be equal?
             newMacro |= this_pc.instAddr() != next_pc->instAddr();
 
-            // Move to the next instruction, unless we have a branch.
+            // TODO: Move to the next instruction, unless we have a branch. It
+            // seems that we haven't handled the branch yet.
             set(this_pc, *next_pc);
             inRom = isRomMicroPC(this_pc.microPC());
 
@@ -1332,6 +1361,7 @@ Fetch::fetch(bool &status_change)
                 "fetch buffer.\n", tid);
     }
 
+    //TODO: here sets the macroop, what does macroop mean?
     macroop[tid] = curMacroop;
     fetchOffset[tid] = pcOffset;
 

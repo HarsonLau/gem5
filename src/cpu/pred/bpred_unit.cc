@@ -146,6 +146,7 @@ BPredUnit::predict(const StaticInstPtr &inst, const InstSeqNum &seqNum,
     void *bp_history = NULL;
     void *indirect_history = NULL;
 
+    //The BPU knows the type of the Inst when predicting
     if (inst->isUncondCtrl()) {
         DPRINTF(Branch, "[tid:%i] [sn:%llu] Unconditional control\n",
             tid,seqNum);
@@ -154,6 +155,10 @@ BPredUnit::predict(const StaticInstPtr &inst, const InstSeqNum &seqNum,
         uncondBranch(tid, pc.instAddr(), bp_history);
     } else {
         ++stats.condPredicted;
+        // TODO: the lookup use the PC and a NULL ptr to the history?
+        // TODO: there is an lookup interface using the PC and history only
+        // TODO: seems the lookup only involves a single BP not a cascaded BP
+        // TODO: the lookup is a virtual function
         pred_taken = lookup(tid, pc.instAddr(), bp_history);
 
         DPRINTF(Branch, "[tid:%i] [sn:%llu] "

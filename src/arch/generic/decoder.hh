@@ -44,6 +44,7 @@ class InstDecoder : public SimObject
   protected:
     void *_moreBytesPtr;
     size_t _moreBytesSize;
+    // mask out the offsets within a Inst
     Addr _pcMask;
 
     bool instDone = false;
@@ -93,6 +94,7 @@ class InstDecoder : public SimObject
     }
 
     void *moreBytesPtr() const { return _moreBytesPtr; }
+    // return a mask to mask out the offsets within a Inst
     size_t moreBytesSize() const { return _moreBytesSize; }
     Addr pcMask() const { return _pcMask; }
 
