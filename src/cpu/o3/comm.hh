@@ -49,6 +49,7 @@
 #include "cpu/inst_seq.hh"
 #include "cpu/o3/dyn_inst_ptr.hh"
 #include "cpu/o3/limits.hh"
+#include "cpu/pred/ftb_struct.hh"
 #include "sim/faults.hh"
 
 namespace gem5
@@ -57,6 +58,8 @@ namespace gem5
 namespace o3
 {
 
+using FetchStreamIdType = gem5::branch_prediction::FetchStreamIdType;
+using FetchTargetIdType = gem5::branch_prediction::FetchTargetIdType;
 /** Struct that defines the information passed from fetch to decode. */
 struct FetchStruct
 {
@@ -93,6 +96,8 @@ struct IEWStruct
     DynInstPtr mispredictInst[MaxThreads];
     Addr mispredPC[MaxThreads];
     InstSeqNum squashedSeqNum[MaxThreads];
+    FetchStreamIdType squashedStreamId[MaxThreads];
+    FetchTargetIdType squashedTargetId[MaxThreads];
     std::unique_ptr<PCStateBase> pc[MaxThreads];
 
     bool squash[MaxThreads];
