@@ -1017,7 +1017,11 @@ Commit::commitInsts()
             // Try to commit the head instruction.
             bool commit_success = commitHead(head_inst, num_committed);
 
-            if (commit_success) {
+            // TODO: use head_inst->pcState().branching() to check whether this
+            // branch is actually taken
+            if (commit_success)
+            {
+                // TODO: notify the DBP that this instruction has committed
                 ++num_committed;
                 stats.committedInstType[tid][head_inst->opClass()]++;
                 ppCommit->notify(head_inst);
@@ -1122,7 +1126,9 @@ Commit::commitInsts()
                 if (!interrupt && avoidQuiesceLiveLock &&
                     onInstBoundary && cpu->checkInterrupts(0))
                     squashAfter(tid, head_inst);
-            } else {
+            }
+            else
+            {
                 DPRINTF(Commit, "Unable to commit head instruction PC:%s "
                         "[tid:%i] [sn:%llu].\n",
                         head_inst->pcState(), tid ,head_inst->seqNum);

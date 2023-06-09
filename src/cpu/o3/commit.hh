@@ -131,6 +131,7 @@ class Commit
     void processTrapEvent(ThreadID tid);
 
   public:
+    /** TODO: pass the DBP to the commit stage*/
     /** Construct a Commit with the given parameters. */
     Commit(CPU *_cpu, const BaseO3CPUParams &params);
 
