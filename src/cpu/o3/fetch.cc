@@ -507,6 +507,7 @@ Fetch::deactivateThread(ThreadID tid)
     }
 }
 
+//TODO: use FTB to make predictions
 bool
 Fetch::lookupAndUpdateNextPC(const DynInstPtr &inst, PCStateBase &next_pc)
 {
@@ -709,6 +710,18 @@ Fetch::finishTranslation(const Fault &fault, const RequestPtr &mem_req)
     _status = updateFetchStatus();
 }
 
+// sets the program counter for the specified thread to the new program
+// counter. It also resets the fetch offset for the thread and clears the
+// decoder. If the squash was caused by a specific instruction and the
+// instruction's macroop contains the expected new insts, the function sets the
+// macroop for the thread to the macroop of the instruction. Otherwise, it sets
+// the macroop to null. The function then checks if there is an outstanding
+// Icache miss or ITLB miss for the thread and clears the corresponding memory
+// request if there is. It also checks if there is a retrying packet for the
+// thread and clears it if there is. Next, the function sets the fetch status
+// for the thread to Squashing and clears the fetch queue for the thread.
+// Finally, the function sets the delayedCommit flag for the thread to true,
+// which ensures that interrupts are not handled when they cannot be.
 void
 Fetch::doSquash(const PCStateBase &new_pc, const DynInstPtr squashInst,
         ThreadID tid)
@@ -936,6 +949,8 @@ Fetch::tick()
         cpu->activityThisCycle();
     }
 
+    // TODO: Fetch Target Queue enqueue and update useupFetchTargets
+
     // Reset the number of the instruction we've fetched.
     numInst = 0;
 }
@@ -1059,6 +1074,10 @@ Fetch::buildInst(ThreadID tid, StaticInstPtr staticInst,
             arrays, staticInst, curMacroop, this_pc, next_pc, seq, cpu);
     instruction->setTid(tid);
 
+    //TODO: set stream id and fetch target id here
+
+    //TODO: set fallthru pc? is this necessary?
+
     instruction->setThreadState(cpu->thread[tid]);
 
     DPRINTF(Fetch, "[tid:%i] Instruction PC %s created [sn:%lli].\n",
@@ -1117,6 +1136,8 @@ Fetch::fetch(bool &status_change)
     }
 
     DPRINTF(Fetch, "Attempting to fetch from [tid:%i]\n", tid);
+
+    // TODO: check if there is fetch Target available
 
     // The current PC.
     PCStateBase &this_pc = *pc[tid];
