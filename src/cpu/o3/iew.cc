@@ -462,6 +462,8 @@ IEW::squashDueToBranch(const DynInstPtr& inst, ThreadID tid)
         toCommit->squashedSeqNum[tid] = inst->seqNum;
         toCommit->branchTaken[tid] = inst->pcState().branching();
 
+        //TODO: pass stream and target id to commit stage
+
         set(toCommit->pc[tid], inst->pcState());
         inst->staticInst->advancePC(*toCommit->pc[tid]);
 
@@ -491,6 +493,8 @@ IEW::squashDueToMemOrder(const DynInstPtr& inst, ThreadID tid)
         toCommit->squashedSeqNum[tid] = inst->seqNum;
         set(toCommit->pc[tid], inst->pcState());
         toCommit->mispredictInst[tid] = NULL;
+
+        //TODO: pass stream and target id to commit stage
 
         // Must include the memory violator in the squash.
         toCommit->includeSquashInst[tid] = true;
