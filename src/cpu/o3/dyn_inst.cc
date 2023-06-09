@@ -106,6 +106,28 @@ DynInst::DynInst(const Arrays &arrays, const StaticInstPtr &_staticInst,
     : DynInst(arrays, _staticInst, _macroop, 0, nullptr)
 {}
 
+/**constructor implementation with stream id and ftb id*/
+DynInst::DynInst(const Arrays &arrays, const StaticInstPtr &_staticInst,
+                 const StaticInstPtr &_macroop, InstSeqNum seq_num,
+                 FetchStreamIdType stream_id, FetchTargetIdType target_id,
+                 CPU *cpu)
+    : DynInst(arrays, _staticInst, _macroop, seq_num, cpu)
+{
+    _streamID = stream_id;
+    _fetchTargetID = target_id;
+}
+
+DynInst::DynInst(const Arrays &arrays, const StaticInstPtr &_staticInst,
+                 const StaticInstPtr &_macroop, const PCStateBase &pc,
+                 const PCStateBase &pred_pc, InstSeqNum seq_num,
+                 FetchStreamIdType stream_id, FetchTargetIdType target_id,
+                 CPU *cpu)
+    : DynInst(arrays, _staticInst, _macroop, pc, pred_pc, seq_num, cpu)
+{
+    _streamID = stream_id;
+    _fetchTargetID = target_id;
+}
+
 /*
  * This custom "new" operator uses the default "new" operator to allocate space
  * for a DynInst, but also pads out the number of bytes to make room for some

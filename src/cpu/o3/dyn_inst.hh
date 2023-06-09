@@ -72,385 +72,402 @@ class Packet;
 namespace o3
 {
 
-class DynInst : public ExecContext, public RefCounted
-{
-  private:
-    DynInst(const StaticInstPtr &staticInst, const StaticInstPtr &macroop,
-            InstSeqNum seq_num, CPU *cpu);
-
-  public:
-    // The list of instructions iterator type.
-    typedef typename std::list<DynInstPtr>::iterator ListIt;
-
-    struct Arrays
+    using FetchStreamIdType = gem5::branch_prediction::FetchStreamIdType;
+    using FetchTargetIdType = gem5::branch_prediction::FetchTargetIdType;
+    class DynInst : public ExecContext, public RefCounted
     {
-        size_t numSrcs;
-        size_t numDests;
-
-        RegId *flatDestIdx;
-        PhysRegIdPtr *destIdx;
-        PhysRegIdPtr *prevDestIdx;
-        PhysRegIdPtr *srcIdx;
-        uint8_t *readySrcIdx;
-    };
-
-    static void *operator new(size_t count, Arrays &arrays);
-
-    /** BaseDynInst constructor given a binary instruction. */
-    DynInst(const Arrays &arrays, const StaticInstPtr &staticInst,
-            const StaticInstPtr &macroop, InstSeqNum seq_num, CPU *cpu);
-
-    DynInst(const Arrays &arrays, const StaticInstPtr &staticInst,
-            const StaticInstPtr &macroop, const PCStateBase &pc,
-            const PCStateBase &pred_pc, InstSeqNum seq_num, CPU *cpu);
-
-    /** BaseDynInst constructor given a static inst pointer. */
-    DynInst(const Arrays &arrays, const StaticInstPtr &_staticInst,
-            const StaticInstPtr &_macroop);
-
-    ~DynInst();
-
-    /** Executes the instruction.*/
-    Fault execute();
-
-    /** Initiates the access.  Only valid for memory operations. */
-    Fault initiateAcc();
-
-    /** Completes the access.  Only valid for memory operations. */
-    Fault completeAcc(PacketPtr pkt);
-
-    /** The sequence number of the instruction. */
-    InstSeqNum seqNum = 0;
-
-    /** The StaticInst used by this BaseDynInst. */
-    const StaticInstPtr staticInst;
-
-    /** Pointer to the Impl's CPU object. */
-    CPU *cpu = nullptr;
-
-    BaseCPU *getCpuPtr() { return cpu; }
-
-    /** Pointer to the thread state. */
-    ThreadState *thread = nullptr;
-
-    /** The kind of fault this instruction has generated. */
-    Fault fault = NoFault;
-
-    /** InstRecord that tracks this instructions. */
-    trace::InstRecord *traceData = nullptr;
-
-  protected:
-    enum Status
-    {
-        IqEntry,                 /// Instruction is in the IQ
-        RobEntry,                /// Instruction is in the ROB
-        LsqEntry,                /// Instruction is in the LSQ
-        Completed,               /// Instruction has completed
-        ResultReady,             /// Instruction has its result
-        CanIssue,                /// Instruction can issue and execute
-        Issued,                  /// Instruction has issued
-        Executed,                /// Instruction has executed
-        CanCommit,               /// Instruction can commit
-        AtCommit,                /// Instruction has reached commit
-        Committed,               /// Instruction has committed
-        Squashed,                /// Instruction is squashed
-        SquashedInIQ,            /// Instruction is squashed in the IQ
-        SquashedInLSQ,           /// Instruction is squashed in the LSQ
-        SquashedInROB,           /// Instruction is squashed in the ROB
-        PinnedRegsRenamed,       /// Pinned registers are renamed
-        PinnedRegsWritten,       /// Pinned registers are written back
-        PinnedRegsSquashDone,    /// Regs pinning status updated after squash
-        RecoverInst,             /// Is a recover instruction
-        BlockingInst,            /// Is a blocking instruction
-        ThreadsyncWait,          /// Is a thread synchronization instruction
-        SerializeBefore,         /// Needs to serialize on
-                                 /// instructions ahead of it
-        SerializeAfter,          /// Needs to serialize instructions behind it
-        SerializeHandled,        /// Serialization has been handled
-        NumStatus
-    };
-
-    enum Flags
-    {
-        NotAnInst,
-        TranslationStarted,
-        TranslationCompleted,
-        PossibleLoadViolation,
-        HitExternalSnoop,
-        EffAddrValid,
-        RecordResult,
-        Predicate,
-        MemAccPredicate,
-        PredTaken,
-        IsStrictlyOrdered,
-        ReqMade,
-        MemOpDone,
-        HtmFromTransaction,
-        MaxFlags
-    };
-
-  private:
-    /* An amalgamation of a lot of boolean values into one */
-    std::bitset<MaxFlags> instFlags;
-
-    /** The status of this BaseDynInst.  Several bits can be set. */
-    std::bitset<NumStatus> status;
-
-  protected:
-    /** The result of the instruction; assumes an instruction can have many
-     *  destination registers.
-     */
-    std::queue<InstResult> instResult;
-
-    /** PC state for this instruction. */
-    std::unique_ptr<PCStateBase> pc;
-
-    /** Values to be written to the destination misc. registers. */
-    std::vector<RegVal> _destMiscRegVal;
-
-    /** Indexes of the destination misc. registers. They are needed to defer
-     * the write accesses to the misc. registers until the commit stage, when
-     * the instruction is out of its speculative state.
-     */
-    std::vector<short> _destMiscRegIdx;
-
-    size_t _numSrcs;
-    size_t _numDests;
-
-    // Flattened register index of the destination registers of this
-    // instruction.
-    RegId *_flatDestIdx;
-
-    // Physical register index of the destination registers of this
-    // instruction.
-    PhysRegIdPtr *_destIdx;
-
-    // Physical register index of the previous producers of the
-    // architected destinations.
-    PhysRegIdPtr *_prevDestIdx;
-
-    // Physical register index of the source registers of this instruction.
-    PhysRegIdPtr *_srcIdx;
-
-    // Whether or not the source register is ready, one bit per register.
-    uint8_t *_readySrcIdx;
-
-  public:
-    size_t numSrcs() const { return _numSrcs; }
-    size_t numDests() const { return _numDests; }
-
-    // Returns the flattened register index of the idx'th destination
-    // register.
-    const RegId &
-    flattenedDestIdx(int idx) const
-    {
-        return _flatDestIdx[idx];
-    }
-
-    // Flattens a destination architectural register index into a logical
-    // index.
-    void
-    flattenedDestIdx(int idx, const RegId &reg_id)
-    {
-        _flatDestIdx[idx] = reg_id;
-    }
-
-    // Returns the physical register index of the idx'th destination
-    // register.
-    PhysRegIdPtr
-    renamedDestIdx(int idx) const
-    {
-        return _destIdx[idx];
-    }
-
-    // Set the renamed dest register id.
-    void
-    renamedDestIdx(int idx, PhysRegIdPtr phys_reg_id)
-    {
-        _destIdx[idx] = phys_reg_id;
-    }
-
-    // Returns the physical register index of the previous physical
-    // register that remapped to the same logical register index.
-    PhysRegIdPtr
-    prevDestIdx(int idx) const
-    {
-        return _prevDestIdx[idx];
-    }
-
-    // Set the previous renamed dest register id.
-    void
-    prevDestIdx(int idx, PhysRegIdPtr phys_reg_id)
-    {
-        _prevDestIdx[idx] = phys_reg_id;
-    }
-
-    // Returns the physical register index of the i'th source register.
-    PhysRegIdPtr
-    renamedSrcIdx(int idx) const
-    {
-        return _srcIdx[idx];
-    }
-
-    void
-    renamedSrcIdx(int idx, PhysRegIdPtr phys_reg_id)
-    {
-        _srcIdx[idx] = phys_reg_id;
-    }
-
-    bool
-    readySrcIdx(int idx) const
-    {
-        uint8_t &byte = _readySrcIdx[idx / 8];
-        return bits(byte, idx % 8);
-    }
-
-    void
-    readySrcIdx(int idx, bool ready)
-    {
-        uint8_t &byte = _readySrcIdx[idx / 8];
-        replaceBits(byte, idx % 8, ready ? 1 : 0);
-    }
-
-    /** The thread this instruction is from. */
-    ThreadID threadNumber = 0;
-
-    /** Iterator pointing to this BaseDynInst in the list of all insts. */
-    ListIt instListIt;
-
-    ////////////////////// Branch Data ///////////////
-    /** Predicted PC state after this instruction. */
-    std::unique_ptr<PCStateBase> predPC;
-
-    /** The Macroop if one exists */
-    const StaticInstPtr macroop;
-
-    /** How many source registers are ready. */
-    uint8_t readyRegs = 0;
-
-  public:
-    /////////////////////// Load Store Data //////////////////////
-    /** The effective virtual address (lds & stores only). */
-    Addr effAddr = 0;
-
-    /** The effective physical address. */
-    Addr physEffAddr = 0;
-
-    /** The memory request flags (from translation). */
-    unsigned memReqFlags = 0;
-
-    /** The size of the request */
-    unsigned effSize;
-
-    /** Pointer to the data for the memory access. */
-    uint8_t *memData = nullptr;
-
-    /** Load queue index. */
-    ssize_t lqIdx = -1;
-    typename LSQUnit::LQIterator lqIt;
-
-    /** Store queue index. */
-    ssize_t sqIdx = -1;
-    typename LSQUnit::SQIterator sqIt;
-
-
-    /////////////////////// TLB Miss //////////////////////
-    /**
-     * Saved memory request (needed when the DTB address translation is
-     * delayed due to a hw page table walk).
-     */
-    LSQ::LSQRequest *savedRequest;
-
-    /////////////////////// Checker //////////////////////
-    // Need a copy of main request pointer to verify on writes.
-    RequestPtr reqToVerify;
-
-  public:
-    /** Records changes to result? */
-    void recordResult(bool f) { instFlags[RecordResult] = f; }
-
-    /** Is the effective virtual address valid. */
-    bool effAddrValid() const { return instFlags[EffAddrValid]; }
-    void effAddrValid(bool b) { instFlags[EffAddrValid] = b; }
-
-    /** Whether or not the memory operation is done. */
-    bool memOpDone() const { return instFlags[MemOpDone]; }
-    void memOpDone(bool f) { instFlags[MemOpDone] = f; }
-
-    bool notAnInst() const { return instFlags[NotAnInst]; }
-    void setNotAnInst() { instFlags[NotAnInst] = true; }
-
-
-    ////////////////////////////////////////////
-    //
-    // INSTRUCTION EXECUTION
-    //
-    ////////////////////////////////////////////
-
-    void
-    demapPage(Addr vaddr, uint64_t asn) override
-    {
-        cpu->demapPage(vaddr, asn);
-    }
-
-    Fault initiateMemRead(Addr addr, unsigned size, Request::Flags flags,
-            const std::vector<bool> &byte_enable) override;
-
-    Fault initiateMemMgmtCmd(Request::Flags flags) override;
-
-    Fault writeMem(uint8_t *data, unsigned size, Addr addr,
-                   Request::Flags flags, uint64_t *res,
-                   const std::vector<bool> &byte_enable) override;
-
-    Fault initiateMemAMO(Addr addr, unsigned size, Request::Flags flags,
-                         AtomicOpFunctorPtr amo_op) override;
-
-    /** True if the DTB address translation has started. */
-    bool translationStarted() const { return instFlags[TranslationStarted]; }
-    void translationStarted(bool f) { instFlags[TranslationStarted] = f; }
-
-    /** True if the DTB address translation has completed. */
-    bool
-    translationCompleted() const
-    {
-        return instFlags[TranslationCompleted];
-    }
-    void translationCompleted(bool f) { instFlags[TranslationCompleted] = f; }
-
-    /** True if this address was found to match a previous load and they issued
-     * out of order. If that happend, then it's only a problem if an incoming
-     * snoop invalidate modifies the line, in which case we need to squash.
-     * If nothing modified the line the order doesn't matter.
-     */
-    bool
-    possibleLoadViolation() const
-    {
-        return instFlags[PossibleLoadViolation];
-    }
-    void
-    possibleLoadViolation(bool f)
-    {
-        instFlags[PossibleLoadViolation] = f;
-    }
-
-    /** True if the address hit a external snoop while sitting in the LSQ.
-     * If this is true and a older instruction sees it, this instruction must
-     * reexecute
-     */
-    bool hitExternalSnoop() const { return instFlags[HitExternalSnoop]; }
-    void hitExternalSnoop(bool f) { instFlags[HitExternalSnoop] = f; }
-
-    /**
-     * Returns true if the DTB address translation is being delayed due to a hw
-     * page table walk.
-     */
-    bool
-    isTranslationDelayed() const
-    {
-        return (translationStarted() && !translationCompleted());
-    }
-
-  public:
+    private:
+        DynInst(const StaticInstPtr &staticInst, const StaticInstPtr &macroop,
+                InstSeqNum seq_num, CPU *cpu);
+
+    public:
+        // The list of instructions iterator type.
+        typedef typename std::list<DynInstPtr>::iterator ListIt;
+
+        struct Arrays
+        {
+            size_t numSrcs;
+            size_t numDests;
+
+            RegId *flatDestIdx;
+            PhysRegIdPtr *destIdx;
+            PhysRegIdPtr *prevDestIdx;
+            PhysRegIdPtr *srcIdx;
+            uint8_t *readySrcIdx;
+        };
+
+        static void *operator new(size_t count, Arrays &arrays);
+
+        /** BaseDynInst constructor given a binary instruction. */
+        DynInst(const Arrays &arrays, const StaticInstPtr &staticInst,
+                const StaticInstPtr &macroop, InstSeqNum seq_num, CPU *cpu);
+
+        DynInst(const Arrays &arrays, const StaticInstPtr &staticInst,
+                const StaticInstPtr &macroop, const PCStateBase &pc,
+                const PCStateBase &pred_pc, InstSeqNum seq_num, CPU *cpu);
+
+        /** BaseDynInst constructor given a static inst pointer. */
+        DynInst(const Arrays &arrays, const StaticInstPtr &_staticInst,
+                const StaticInstPtr &_macroop);
+
+        /** Construtors with stream id and fetch target id*/
+        DynInst(const Arrays &arrays, const StaticInstPtr &_staticInst,
+                const StaticInstPtr &_macroop, InstSeqNum seq_num,
+                FetchStreamIdType stream_id, FetchTargetIdType target_id,
+                CPU *cpu);
+
+        DynInst(const Arrays &arrays, const StaticInstPtr &_staticInst,
+                const StaticInstPtr &_macroop, const PCStateBase &pc,
+                const PCStateBase &pred_pc, InstSeqNum seq_num,
+                FetchStreamIdType stream_id, FetchTargetIdType target_id,
+                CPU *cpu);
+
+        ~DynInst();
+
+        /** Executes the instruction.*/
+        Fault execute();
+
+        /** Initiates the access.  Only valid for memory operations. */
+        Fault initiateAcc();
+
+        /** Completes the access.  Only valid for memory operations. */
+        Fault completeAcc(PacketPtr pkt);
+
+        /** The sequence number of the instruction. */
+        InstSeqNum seqNum = 0;
+
+        /** The StaticInst used by this BaseDynInst. */
+        const StaticInstPtr staticInst;
+
+        /** Pointer to the Impl's CPU object. */
+        CPU *cpu = nullptr;
+
+        BaseCPU *getCpuPtr() { return cpu; }
+
+        /** Pointer to the thread state. */
+        ThreadState *thread = nullptr;
+
+        /** The kind of fault this instruction has generated. */
+        Fault fault = NoFault;
+
+        /** InstRecord that tracks this instructions. */
+        trace::InstRecord *traceData = nullptr;
+
+    protected:
+        enum Status
+        {
+            IqEntry,              /// Instruction is in the IQ
+            RobEntry,             /// Instruction is in the ROB
+            LsqEntry,             /// Instruction is in the LSQ
+            Completed,            /// Instruction has completed
+            ResultReady,          /// Instruction has its result
+            CanIssue,             /// Instruction can issue and execute
+            Issued,               /// Instruction has issued
+            Executed,             /// Instruction has executed
+            CanCommit,            /// Instruction can commit
+            AtCommit,             /// Instruction has reached commit
+            Committed,            /// Instruction has committed
+            Squashed,             /// Instruction is squashed
+            SquashedInIQ,         /// Instruction is squashed in the IQ
+            SquashedInLSQ,        /// Instruction is squashed in the LSQ
+            SquashedInROB,        /// Instruction is squashed in the ROB
+            PinnedRegsRenamed,    /// Pinned registers are renamed
+            PinnedRegsWritten,    /// Pinned registers are written back
+            PinnedRegsSquashDone, /// Regs pinning status updated after squash
+            RecoverInst,          /// Is a recover instruction
+            BlockingInst,         /// Is a blocking instruction
+            ThreadsyncWait,       /// Is a thread synchronization instruction
+            SerializeBefore,      /// Needs to serialize on
+                                  /// instructions ahead of it
+            SerializeAfter,       /// Needs to serialize instructions behind it
+            SerializeHandled,     /// Serialization has been handled
+            NumStatus
+        };
+
+        enum Flags
+        {
+            NotAnInst,
+            TranslationStarted,
+            TranslationCompleted,
+            PossibleLoadViolation,
+            HitExternalSnoop,
+            EffAddrValid,
+            RecordResult,
+            Predicate,
+            MemAccPredicate,
+            PredTaken,
+            IsStrictlyOrdered,
+            ReqMade,
+            MemOpDone,
+            HtmFromTransaction,
+            MaxFlags
+        };
+
+    private:
+        /* An amalgamation of a lot of boolean values into one */
+        std::bitset<MaxFlags> instFlags;
+
+        /** The status of this BaseDynInst.  Several bits can be set. */
+        std::bitset<NumStatus> status;
+
+    protected:
+        /** The result of the instruction; assumes an instruction can have many
+         *  destination registers.
+         */
+        std::queue<InstResult> instResult;
+
+        /** PC state for this instruction. */
+        std::unique_ptr<PCStateBase> pc;
+
+        /** Values to be written to the destination misc. registers. */
+        std::vector<RegVal> _destMiscRegVal;
+
+        /** Indexes of the destination misc. registers. They are needed to
+         * defer the write accesses to the misc. registers until the commit
+         * stage, when the instruction is out of its speculative state.
+         */
+        std::vector<short> _destMiscRegIdx;
+
+        size_t _numSrcs;
+        size_t _numDests;
+
+        // Flattened register index of the destination registers of this
+        // instruction.
+        RegId *_flatDestIdx;
+
+        // Physical register index of the destination registers of this
+        // instruction.
+        PhysRegIdPtr *_destIdx;
+
+        // Physical register index of the previous producers of the
+        // architected destinations.
+        PhysRegIdPtr *_prevDestIdx;
+
+        // Physical register index of the source registers of this instruction.
+        PhysRegIdPtr *_srcIdx;
+
+        // Whether or not the source register is ready, one bit per register.
+        uint8_t *_readySrcIdx;
+
+    public:
+        size_t numSrcs() const { return _numSrcs; }
+        size_t numDests() const { return _numDests; }
+
+        // Returns the flattened register index of the idx'th destination
+        // register.
+        const RegId &flattenedDestIdx(int idx) const
+        {
+            return _flatDestIdx[idx];
+        }
+
+        // Flattens a destination architectural register index into a logical
+        // index.
+        void flattenedDestIdx(int idx, const RegId &reg_id)
+        {
+            _flatDestIdx[idx] = reg_id;
+        }
+
+        // Returns the physical register index of the idx'th destination
+        // register.
+        PhysRegIdPtr renamedDestIdx(int idx) const { return _destIdx[idx]; }
+
+        // Set the renamed dest register id.
+        void renamedDestIdx(int idx, PhysRegIdPtr phys_reg_id)
+        {
+            _destIdx[idx] = phys_reg_id;
+        }
+
+        // Returns the physical register index of the previous physical
+        // register that remapped to the same logical register index.
+        PhysRegIdPtr prevDestIdx(int idx) const { return _prevDestIdx[idx]; }
+
+        // Set the previous renamed dest register id.
+        void prevDestIdx(int idx, PhysRegIdPtr phys_reg_id)
+        {
+            _prevDestIdx[idx] = phys_reg_id;
+        }
+
+        // Returns the physical register index of the i'th source register.
+        PhysRegIdPtr renamedSrcIdx(int idx) const { return _srcIdx[idx]; }
+
+        void renamedSrcIdx(int idx, PhysRegIdPtr phys_reg_id)
+        {
+            _srcIdx[idx] = phys_reg_id;
+        }
+
+        bool readySrcIdx(int idx) const
+        {
+            uint8_t &byte = _readySrcIdx[idx / 8];
+            return bits(byte, idx % 8);
+        }
+
+        void readySrcIdx(int idx, bool ready)
+        {
+            uint8_t &byte = _readySrcIdx[idx / 8];
+            replaceBits(byte, idx % 8, ready ? 1 : 0);
+        }
+
+        /** The thread this instruction is from. */
+        ThreadID threadNumber = 0;
+
+        /** Iterator pointing to this BaseDynInst in the list of all insts. */
+        ListIt instListIt;
+
+        ////////////////////// Branch Data ///////////////
+        /** Predicted PC state after this instruction. */
+        std::unique_ptr<PCStateBase> predPC;
+
+        FetchStreamIdType _streamID;
+        FetchTargetIdType _fetchTargetID;
+
+        /** The Macroop if one exists */
+        const StaticInstPtr macroop;
+
+        /** How many source registers are ready. */
+        uint8_t readyRegs = 0;
+
+    public:
+        gem5::branch_prediction::FetchStreamIdType streamID() const
+        {
+            return _streamID;
+        }
+        gem5::branch_prediction::FetchTargetIdType fetchTargetID() const
+        {
+            return _fetchTargetID;
+        }
+        // set the stream id
+        void setStreamID(gem5::branch_prediction::FetchStreamIdType id)
+        {
+            _streamID = id;
+        }
+        // set the fetch target id
+        void setFetchTargetID(gem5::branch_prediction::FetchTargetIdType id)
+        {
+            _fetchTargetID = id;
+        }
+
+    public:
+        /////////////////////// Load Store Data //////////////////////
+        /** The effective virtual address (lds & stores only). */
+        Addr effAddr = 0;
+
+        /** The effective physical address. */
+        Addr physEffAddr = 0;
+
+        /** The memory request flags (from translation). */
+        unsigned memReqFlags = 0;
+
+        /** The size of the request */
+        unsigned effSize;
+
+        /** Pointer to the data for the memory access. */
+        uint8_t *memData = nullptr;
+
+        /** Load queue index. */
+        ssize_t lqIdx = -1;
+        typename LSQUnit::LQIterator lqIt;
+
+        /** Store queue index. */
+        ssize_t sqIdx = -1;
+        typename LSQUnit::SQIterator sqIt;
+
+        /////////////////////// TLB Miss //////////////////////
+        /**
+         * Saved memory request (needed when the DTB address translation is
+         * delayed due to a hw page table walk).
+         */
+        LSQ::LSQRequest *savedRequest;
+
+        /////////////////////// Checker //////////////////////
+        // Need a copy of main request pointer to verify on writes.
+        RequestPtr reqToVerify;
+
+    public:
+        /** Records changes to result? */
+        void recordResult(bool f) { instFlags[RecordResult] = f; }
+
+        /** Is the effective virtual address valid. */
+        bool effAddrValid() const { return instFlags[EffAddrValid]; }
+        void effAddrValid(bool b) { instFlags[EffAddrValid] = b; }
+
+        /** Whether or not the memory operation is done. */
+        bool memOpDone() const { return instFlags[MemOpDone]; }
+        void memOpDone(bool f) { instFlags[MemOpDone] = f; }
+
+        bool notAnInst() const { return instFlags[NotAnInst]; }
+        void setNotAnInst() { instFlags[NotAnInst] = true; }
+
+        ////////////////////////////////////////////
+        //
+        // INSTRUCTION EXECUTION
+        //
+        ////////////////////////////////////////////
+
+        void demapPage(Addr vaddr, uint64_t asn) override
+        {
+            cpu->demapPage(vaddr, asn);
+        }
+
+        Fault initiateMemRead(Addr addr, unsigned size, Request::Flags flags,
+                              const std::vector<bool> &byte_enable) override;
+
+        Fault initiateMemMgmtCmd(Request::Flags flags) override;
+
+        Fault writeMem(uint8_t *data, unsigned size, Addr addr,
+                       Request::Flags flags, uint64_t *res,
+                       const std::vector<bool> &byte_enable) override;
+
+        Fault initiateMemAMO(Addr addr, unsigned size, Request::Flags flags,
+                             AtomicOpFunctorPtr amo_op) override;
+
+        /** True if the DTB address translation has started. */
+        bool translationStarted() const
+        {
+            return instFlags[TranslationStarted];
+        }
+        void translationStarted(bool f) { instFlags[TranslationStarted] = f; }
+
+        /** True if the DTB address translation has completed. */
+        bool translationCompleted() const
+        {
+            return instFlags[TranslationCompleted];
+        }
+        void translationCompleted(bool f)
+        {
+            instFlags[TranslationCompleted] = f;
+        }
+
+        /** True if this address was found to match a previous load and they
+         * issued out of order. If that happend, then it's only a problem if an
+         * incoming snoop invalidate modifies the line, in which case we need
+         * to squash. If nothing modified the line the order doesn't matter.
+         */
+        bool possibleLoadViolation() const
+        {
+            return instFlags[PossibleLoadViolation];
+        }
+        void possibleLoadViolation(bool f)
+        {
+            instFlags[PossibleLoadViolation] = f;
+        }
+
+        /** True if the address hit a external snoop while sitting in the LSQ.
+         * If this is true and a older instruction sees it, this instruction
+         * must reexecute
+         */
+        bool hitExternalSnoop() const { return instFlags[HitExternalSnoop]; }
+        void hitExternalSnoop(bool f) { instFlags[HitExternalSnoop] = f; }
+
+        /**
+         * Returns true if the DTB address translation is being delayed due to
+         * a hw page table walk.
+         */
+        bool isTranslationDelayed() const
+        {
+            return (translationStarted() && !translationCompleted());
+        }
+
+    public:
 #ifdef DEBUG
     void dumpSNList();
 #endif
